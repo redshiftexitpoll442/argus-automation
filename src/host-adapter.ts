@@ -23,6 +23,9 @@ import { createFileLogger } from "./logger.js";
 const WIN_DEFAULT_SUB_GATES: CuSubGates = {
   ...ALL_SUB_GATES_ON,
   pixelValidation: false,   // cropRawPatch can't be sync on Windows (sharp is async)
+  hideBeforeAction: false,   // Windows has no compositor-level filtering; minimizing
+                             // non-allowlisted windows breaks child processes like
+                             // WebView2 (used by Excel add-ins). User manages windows.
   autoTargetDisplay: false,  // No atomic Swift resolver on Windows
   clipboardGuard: false,     // No Electron clipboard module to stash
 };
