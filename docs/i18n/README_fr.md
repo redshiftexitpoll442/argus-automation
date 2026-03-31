@@ -13,7 +13,7 @@
 
 > **Argus** (Ἄργος Πανόπτης) — le géant aux cent yeux de la mythologie grecque, gardien omniscient qui ne dort jamais. Nous avons nommé ce projet Argus parce qu'il voit l'intégralité de votre bureau grâce aux captures d'écran et le contrôle avec une précision chirurgicale — tout comme le gardien mythologique veillait sur tout ce qui lui était confié.
 
-Tous les autres MCP d'automatisation de bureau construisent leurs schémas d'outils, leur modèle de sécurité et leur logique de dispatch à partir de zéro. Argus réutilise directement **plus de 6 300 lignes** du code de production Chicago MCP d'Anthropic — le même code qui alimente le contrôle de bureau macOS intégré à Claude Code — et ne remplace que la couche native par des équivalents Windows. Mêmes 24 outils, même modèle de sécurité à 3 niveaux, même optimisation de tokens.
+**Pourquoi Argus ?** Tous les autres MCP de bureau donnent à l'IA une capture d'écran et une souris — puis croisent les doigts. Argus est fondamentalement différent : c'est un portage direct du Chicago MCP d'Anthropic, le système de production derrière le contrôle de bureau intégré à Claude Code. Nous avons repris les 6 300 lignes de logique éprouvée au combat — les contrôles de sécurité, la gestion du budget de tokens, le moteur d'exécution par lots — et n'avons remplacé que la couche native pour Windows. Le résultat est sans doute **l'implémentation de computer-use la plus architecturalement avancée au monde**, et elle est open source.
 
 ## Deux philosophies de conception fondamentalement différentes
 

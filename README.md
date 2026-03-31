@@ -20,7 +20,7 @@
 
 > **Argus** (Ἄργος Πανόπτης) — the hundred-eyed giant of Greek mythology, the all-seeing guardian who never sleeps. We named this project Argus because it sees your entire desktop through screenshots and controls it with surgical precision — just as the mythological guardian watched over everything entrusted to him.
 
-Every other desktop-automation MCP builds its tool schemas, security model, and dispatch logic from scratch. Argus directly reuses **6,300+ lines** of Anthropic's production Chicago MCP code — the same code that powers Claude Code's built-in macOS desktop control — and replaces only the native layer with Windows equivalents. Same 24 tools, same 3-tier security model, same token optimization.
+**Why Argus?** Every other desktop MCP gives the AI a screenshot and a mouse — then hopes for the best. Argus is different: it's a direct port of Anthropic's own Chicago MCP, the production system behind Claude Code's built-in desktop control. We took the 6,300 lines of battle-tested logic — the security gates, the token budgeting, the batch execution engine — and swapped only the native layer for Windows. The result is arguably **the most architecturally advanced computer-use implementation available today**, and it's open source.
 
 ## Two Fundamentally Different Design Philosophies
 
