@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "windows-computer-use": {
+      "command": "node",
+      "args": ["D:/claude-d/gui-automation/windows-computer-use-mcp/dist/index.js"]
+    }
+  }
+}
