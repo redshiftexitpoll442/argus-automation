@@ -10,11 +10,26 @@ import { appendFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "./upstream/types.js";
 
-const LOG_DIR = join(
-  process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? ".", ".local"),
-  "argus-automation",
-  "logs",
-);
+function resolveLogDir(): string {
+  if (process.platform === "darwin") {
+    return join(process.env.HOME ?? "/tmp", "Library", "Logs", "argus-automation");
+  }
+  if (process.platform === "win32") {
+    return join(
+      process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? ".", ".local"),
+      "argus-automation",
+      "logs",
+    );
+  }
+  // Linux
+  return join(
+    process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? "/tmp", ".local", "state"),
+    "argus-automation",
+    "logs",
+  );
+}
+
+const LOG_DIR = resolveLogDir();
 
 function getLogFilePath(): string {
   const now = new Date();

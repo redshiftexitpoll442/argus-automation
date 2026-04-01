@@ -1,25 +1,24 @@
 /**
- * Windows Computer Use MCP Server — stdio entry point.
+ * Cross-platform Computer Use MCP Server — stdio entry point.
  *
- * Launches a standalone MCP server that exposes 25+ computer-use tools
- * for Windows desktop control. Designed to be configured in Claude Code's
- * .mcp.json or any MCP client.
+ * Detects the current platform (macOS, Windows, Linux) at startup and
+ * loads the corresponding host adapter. Uses dynamic imports so
+ * platform-specific native dependencies only load on their target OS.
  *
  * Architecture:
- *   This file → createWindowsHostAdapter → createComputerUseMcpServer
- *   → StdioServerTransport
+ *   This file → platform detection → createXxxHostAdapter
+ *     → createComputerUseMcpServer → StdioServerTransport
  *
  * The MCP server uses the SAME tool schemas and dispatch logic as
- * Anthropic's built-in Chicago MCP (macOS). Only the native layer
- * (screenshot, input, window management) is Windows-specific.
+ * Anthropic's built-in Chicago MCP. Only the native layer differs.
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   createComputerUseMcpServer,
-  bindSessionContext,
 } from "./upstream/mcpServer.js";
 import type {
+  ComputerUseHostAdapter,
   ComputerUseSessionContext,
   AppGrant,
   CuGrantFlags,
@@ -29,19 +28,37 @@ import type {
   ScreenshotDims,
 } from "./upstream/types.js";
 import { DEFAULT_GRANT_FLAGS } from "./upstream/types.js";
-import { createWindowsHostAdapter } from "./host-adapter.js";
 import { getLogDir } from "./logger.js";
+import { CuLockManager } from "./cu-lock.js";
 
-// ── Simple session context (auto-approve mode for CLI usage) ────────────────
+// ── Platform detection ────────────────────────────────────────────────────
 
-/**
- * Minimal session context for standalone (headless) usage.
- *
- * In Claude Code's desktop app, permission dialogs route through the
- * renderer. In standalone mode, we auto-approve all requests — the user
- * has already opted in by configuring and running the MCP server.
- */
-function createAutoApproveSessionContext(): ComputerUseSessionContext {
+async function createHostAdapter(): Promise<ComputerUseHostAdapter> {
+  const platform = process.platform;
+
+  if (platform === "darwin") {
+    const { createDarwinHostAdapter } = await import("./host-adapter-darwin.js");
+    return createDarwinHostAdapter({ serverName: "argus" });
+  }
+
+  if (platform === "win32") {
+    const { createWindowsHostAdapter } = await import("./host-adapter.js");
+    return createWindowsHostAdapter({ serverName: "argus" });
+  }
+
+  // Linux: use Windows adapter pattern (same sub-gates).
+  // Future: create a dedicated Linux adapter.
+  throw new Error(
+    `Unsupported platform: ${platform}. ` +
+    `Argus currently supports macOS (darwin) and Windows (win32).`,
+  );
+}
+
+// ── Session context (auto-approve + CU lock) ──────────────────────────────
+
+function createAutoApproveSessionContext(
+  lock: CuLockManager,
+): ComputerUseSessionContext {
   let allowedApps: AppGrant[] = [];
   let grantFlags: CuGrantFlags = { ...DEFAULT_GRANT_FLAGS };
   let selectedDisplayId: number | undefined;
@@ -58,7 +75,6 @@ function createAutoApproveSessionContext(): ComputerUseSessionContext {
       req: CuPermissionRequest,
       _signal: AbortSignal,
     ): Promise<CuPermissionResponse> => {
-      // Auto-approve: grant all requested apps at their proposed tier
       const granted: AppGrant[] = req.apps
         .filter((a) => a.resolved && !a.alreadyGranted)
         .map((a) => ({
@@ -96,18 +112,22 @@ function createAutoApproveSessionContext(): ComputerUseSessionContext {
     onScreenshotCaptured: (dims) => {
       lastScreenshotDims = dims;
     },
+
+    // ── CU Lock — cross-process mutex ───────────────────────────────────
+    checkCuLock: () => lock.checkCuLock(),
+    acquireCuLock: () => lock.acquireCuLock(),
+    formatLockHeldMessage: (holder) => lock.formatLockHeldMessage(holder),
   };
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const adapter = createWindowsHostAdapter({
-    serverName: "argus",
-  });
+  const adapter = await createHostAdapter();
+  const lock = new CuLockManager();
 
   const coordinateMode: CoordinateMode = "pixels";
-  const sessionCtx = createAutoApproveSessionContext();
+  const sessionCtx = createAutoApproveSessionContext(lock);
 
   const server = createComputerUseMcpServer(
     adapter,
@@ -118,10 +138,17 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  adapter.logger.info(`Windows Computer Use MCP Server started (stdio). Logs → ${getLogDir()}`);
+  const platformLabel =
+    process.platform === "darwin" ? "macOS" :
+    process.platform === "win32" ? "Windows" :
+    process.platform;
 
-  // Keep alive until the transport closes
+  adapter.logger.info(
+    `Argus Computer Use MCP Server started (${platformLabel}, stdio). Logs → ${getLogDir()}`,
+  );
+
   process.on("SIGINT", async () => {
+    lock.release();
     await server.close();
     process.exit(0);
   });
