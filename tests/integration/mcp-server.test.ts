@@ -17,7 +17,7 @@ import type {
   ScreenshotDims,
 } from "../../src/upstream/types.js";
 import { DEFAULT_GRANT_FLAGS } from "../../src/upstream/types.js";
-import { createWindowsHostAdapter } from "../../src/host-adapter.js";
+import { createWindowsHostAdapter } from "../../src/windows/host-adapter.js";
 
 let client: Client;
 

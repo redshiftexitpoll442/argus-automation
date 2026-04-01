@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createWindowsExecutor } from "../../src/executor-windows.js";
+import { createWindowsExecutor } from "../../src/windows/executor.js";
 
 const executor = createWindowsExecutor({
   getMouseAnimationEnabled: () => false,

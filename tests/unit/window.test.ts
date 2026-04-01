@@ -11,7 +11,7 @@ import {
   listVisibleWindows,
   listRunningApps,
   findWindowDisplays,
-} from "../../src/native/window.js";
+} from "../../src/windows/window.js";
 
 describe("window — getForegroundWindowInfo", () => {
   it("should return info about the currently focused window", () => {

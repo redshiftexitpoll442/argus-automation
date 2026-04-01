@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   readClipboard,
   writeClipboard,
-} from "../../src/native/clipboard.js";
+} from "../../src/windows/clipboard.js";
 
 let originalClipboard: string;
 

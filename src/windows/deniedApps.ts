@@ -8,7 +8,7 @@
  * when the model calls request_access.
  */
 
-import type { CuAppPermTier } from "./upstream/types.js";
+import type { CuAppPermTier } from "../upstream/types.js";
 
 /** Browser exes → "read" tier (visible, no interaction). */
 const BROWSER_EXES = new Set([

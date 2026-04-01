@@ -16,13 +16,13 @@ import type {
   ResolvePrepareCaptureResult,
   RunningApp,
   ScreenshotResult,
-} from "./upstream/executor.js";
+} from "../upstream/executor.js";
 import {
   captureMonitor,
   captureRegion,
   listMonitors,
   getMonitorGeometry,
-} from "./native/screen.js";
+} from "./screen.js";
 import {
   getForegroundWindowInfo,
   getWindowFromPoint,
@@ -33,7 +33,7 @@ import {
   activateWindow,
   shellOpen,
   findWindowDisplays as nativeFindWindowDisplays,
-} from "./native/window.js";
+} from "./window.js";
 import {
   moveMouse as nativeMoveMouse,
   getMousePos,
@@ -43,11 +43,11 @@ import {
   keyTap,
   keyToggle,
   typeString,
-} from "./native/input.js";
+} from "./input.js";
 import {
   readClipboard as nativeReadClipboard,
   writeClipboard as nativeWriteClipboard,
-} from "./native/clipboard.js";
+} from "./clipboard.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -298,7 +298,7 @@ export function createWindowsExecutor(opts: {
       const geo = getMonitorGeometry(displayId);
       // Compute target dimensions for the zoomed region
       const { targetImageSize, API_RESIZE_PARAMS } = await import(
-        "./upstream/imageResize.js"
+        "../upstream/imageResize.js"
       );
       const physW = Math.round(regionLogical.w * geo.scaleFactor);
       const physH = Math.round(regionLogical.h * geo.scaleFactor);

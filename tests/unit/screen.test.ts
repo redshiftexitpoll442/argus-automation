@@ -12,7 +12,7 @@ import {
   captureMonitor,
   captureRegion,
   cropRawPatch,
-} from "../../src/native/screen.js";
+} from "../../src/windows/screen.js";
 
 describe("screen — listMonitors", () => {
   it("should return at least one monitor", () => {

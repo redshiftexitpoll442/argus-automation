@@ -28,12 +28,12 @@ import { getLogDir } from "./logger.js";
 
 async function createHostAdapter(): Promise<ComputerUseHostAdapter> {
   if (process.platform === "darwin") {
-    const { getComputerUseHostAdapter } = await import("./darwin/hostAdapter.js");
+    const { getComputerUseHostAdapter } = await import("./mac/hostAdapter.js");
     return getComputerUseHostAdapter();
   }
 
   if (process.platform === "win32") {
-    const { createWindowsHostAdapter } = await import("./host-adapter.js");
+    const { createWindowsHostAdapter } = await import("./windows/host-adapter.js");
     return createWindowsHostAdapter({ serverName: "argus" });
   }
 
@@ -56,7 +56,7 @@ async function createLockCallbacks(): Promise<{
       checkComputerUseLock,
       tryAcquireComputerUseLock,
       releaseComputerUseLock,
-    } = await import("./darwin/computerUseLock.js");
+    } = await import("./mac/computerUseLock.js");
 
     return {
       checkCuLock: async () => {

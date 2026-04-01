@@ -20,19 +20,19 @@ Tests run **sequentially** (fileParallelism: false) because clipboard and input 
 Three layers: **upstream** (Anthropic's Chicago MCP, platform-agnostic) → **platform executor** (macOS or Windows) → **native modules**.
 
 ```
-index.ts
+server-mcp.ts (entry point)
   ├─ process.platform === "darwin"
-  │    → darwin/hostAdapter.ts → darwin/executor.ts
+  │    → mac/hostAdapter.ts → mac/executor.ts
   │        → @ant/computer-use-swift  (SCContentFilter, NSWorkspace, TCC)
   │        → @ant/computer-use-input  (Rust/enigo mouse+keyboard)
-  │        → darwin/drainRunLoop.ts   (CFRunLoop pump — critical!)
+  │        → mac/drainRunLoop.ts      (CFRunLoop pump — critical!)
   │
   └─ process.platform === "win32"
-       → host-adapter.ts → executor-windows.ts
-           → native/screen.ts    (node-screenshots + sharp)
-           → native/input.ts     (robotjs)
-           → native/window.ts    (koffi + Win32 API)
-           → native/clipboard.ts (PowerShell)
+       → windows/host-adapter.ts → windows/executor.ts
+           → windows/screen.ts    (node-screenshots + sharp)
+           → windows/input.ts     (robotjs)
+           → windows/window.ts    (koffi + Win32 API)
+           → windows/clipboard.ts (PowerShell)
 
 Both paths feed into:
   upstream/ (6,300 lines, DO NOT MODIFY)
@@ -47,7 +47,7 @@ Both paths feed into:
 
 The `src/upstream/` directory contains Anthropic's Chicago MCP code from `@ant/computer-use-mcp`. Only 1 line was changed (toolCalls.ts:1162). Never modify these files.
 
-### macOS path (src/darwin/)
+### macOS path (src/mac/)
 
 **Original Claude Code computer-use implementation**, extracted with minimal changes. Uses Anthropic's proprietary native modules (`@ant/computer-use-swift`, `@ant/computer-use-input`) for SCContentFilter screenshots, enigo input, and real TCC permission checks.
 
@@ -55,14 +55,14 @@ The `src/upstream/` directory contains Anthropic's Chicago MCP code from `@ant/c
 
 **Critical**: `drainRunLoop.ts` pumps CFRunLoop every 1ms while native calls are pending. Without this, Swift @MainActor methods and enigo key() hang forever under Node's libuv (unlike Electron which drains CFRunLoop automatically).
 
-### Windows path (src/native/ + executor-windows.ts)
+### Windows path (src/windows/)
 
 Custom implementation using cross-platform and Windows-specific libraries. Written from scratch to match the ComputerExecutor interface.
 
 ### CU Lock (cross-process mutex)
 
 Prevents two Claude sessions from using the computer simultaneously.
-- **macOS**: `darwin/computerUseLock.ts` — O_EXCL file lock at `~/.claude/computer-use.lock` (original Claude Code implementation)
+- **macOS**: `mac/computerUseLock.ts` — O_EXCL file lock at `~/.claude/computer-use.lock` (original Claude Code implementation)
 - **Windows**: Not yet wired (TODO)
 
 When another session holds the lock, upstream returns: "Another Claude session is currently using the computer."
@@ -88,7 +88,7 @@ Requires `@ant/computer-use-swift` and `@ant/computer-use-input` native modules 
   "mcpServers": {
     "argus": {
       "command": "node",
-      "args": ["/path/to/argus-automation/dist/index.js"]
+      "args": ["/path/to/argus-automation/dist/server-mcp.js"]
     }
   }
 }
@@ -106,7 +106,7 @@ npm run build
   "mcpServers": {
     "argus": {
       "command": "node",
-      "args": ["D:/path/to/argus-automation/dist/index.js"]
+      "args": ["D:/path/to/argus-automation/dist/server-mcp.js"]
     }
   }
 }

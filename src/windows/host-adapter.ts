@@ -9,11 +9,11 @@ import type {
   ComputerUseHostAdapter,
   CuSubGates,
   Logger,
-} from "./upstream/types.js";
-import { ALL_SUB_GATES_ON } from "./upstream/subGates.js";
-import { createWindowsExecutor } from "./executor-windows.js";
-import { cropRawPatch } from "./native/screen.js";
-import { createFileLogger } from "./logger.js";
+} from "../upstream/types.js";
+import { ALL_SUB_GATES_ON } from "../upstream/subGates.js";
+import { createWindowsExecutor } from "./executor.js";
+import { cropRawPatch } from "./screen.js";
+import { createFileLogger } from "../logger.js";
 
 /**
  * Default sub-gates for Windows. Most gates are ON; a few are adapted:

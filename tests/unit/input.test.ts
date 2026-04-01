@@ -12,7 +12,7 @@ import {
   moveMouse,
   getScreenSize,
   keyTap,
-} from "../../src/native/input.js";
+} from "../../src/windows/input.js";
 
 describe("input — mouse", () => {
   it("should get current mouse position", () => {

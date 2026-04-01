@@ -2,7 +2,7 @@
   "mcpServers": {
     "argus": {
       "command": "node",
-      "args": ["C:/path/to/argus-automation/dist/index.js"]
+      "args": ["/path/to/argus-automation/dist/server-mcp.js"]
     }
   }
 }
