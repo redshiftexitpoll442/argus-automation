@@ -794,7 +794,23 @@ function resolveRequestedApps(
       resolved = byBundleId.get(requested);
     }
     if (!resolved) {
+      // Windows AUMID bundleIds are lowercase full paths (not reverse-DNS),
+      // so also try direct bundleId lookup for path-style identifiers.
+      resolved = byBundleId.get(requested.toLowerCase());
+    }
+    if (!resolved) {
       resolved = byLowerDisplayName.get(requested.toLowerCase());
+    }
+    // Substring fallback: "Excel" should match displayName "Microsoft Excel"
+    // or "Excel" extracted from window title. Case-insensitive.
+    if (!resolved) {
+      const lower = requested.toLowerCase();
+      for (const [name, app] of byLowerDisplayName) {
+        if (name.includes(lower) || lower.includes(name)) {
+          resolved = app;
+          break;
+        }
+      }
     }
     const bundleId = resolved?.bundleId;
     // When unresolved AND the requested string looks like a bundle ID, use it

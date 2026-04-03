@@ -162,6 +162,32 @@ async function typeViaClipboard(text: string): Promise<void> {
   }
 }
 
+// ── Helpers: display name extraction ───────────────────────────────────────
+
+/**
+ * Extract a clean app display name from a window title.
+ * Windows titles often include the document name: "filename - AppName".
+ * We extract the part after the last " - " as the app name.
+ * Falls back to exe name without extension if no separator found.
+ */
+function extractAppName(windowTitle: string, exeName: string): string {
+  if (!windowTitle) return exeName.replace(/\.exe$/i, "");
+
+  // Common patterns: "Document - AppName", "file.xlsx - Excel"
+  const dashIdx = windowTitle.lastIndexOf(" - ");
+  if (dashIdx !== -1) {
+    const appPart = windowTitle.substring(dashIdx + 3).trim();
+    if (appPart.length > 0 && appPart.length < 40) {
+      return appPart;
+    }
+  }
+
+  // If no " - " separator, use the full title if short, else exe name
+  return windowTitle.length < 40
+    ? windowTitle
+    : exeName.replace(/\.exe$/i, "");
+}
+
 // ── AUMID-based installed-app scan ─────────────────────────────────────────
 // Mirrors the official Claude Desktop approach: AUMID (Application User Model
 // ID) as the canonical bundleId for Windows apps. Traditional Win32 apps use
@@ -695,7 +721,7 @@ export function createWindowsExecutor(opts: {
         if (!byId.has(id) && !isSystemProcess(w.exeName)) {
           byId.set(id, {
             bundleId: id,
-            displayName: w.title || w.exeName.replace(/\.exe$/i, ""),
+            displayName: extractAppName(w.title, w.exeName),
             path: w.exePath,
           });
         }
