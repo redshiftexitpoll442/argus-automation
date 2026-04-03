@@ -147,6 +147,16 @@ export function isExplorer(bundleId: string): boolean {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
+ * Extract the uppercase exe filename from a bundleId.
+ * Handles both old-style ("WEIXIN.EXE") and AUMID-style
+ * ("c:\program files\tencent\weixin\weixin.exe") bundleIds.
+ */
+export function bundleIdToExeName(bundleId: string): string {
+  const parts = bundleId.split(/[\\/]/);
+  return parts[parts.length - 1]!.toUpperCase();
+}
+
+/**
  * Read a wide string (UTF-16LE) from a buffer.
  */
 function readWideString(buffer: Uint16Array): string {
@@ -338,10 +348,11 @@ export function listRunningApps(): Array<{
   const result: Array<{ bundleId: string; displayName: string }> = [];
 
   for (const w of windows) {
-    const id = w.exeName.toUpperCase();
-    if (seen.has(id)) continue;
-    if (isSystemProcess(id) || isExplorer(id)) continue;
-    seen.add(id);
+    const id = w.exePath.toLowerCase();
+    const exeUpper = w.exeName.toUpperCase();
+    if (seen.has(exeUpper)) continue;
+    if (isSystemProcess(w.exeName) || isExplorer(w.exeName)) continue;
+    seen.add(exeUpper);
     result.push({
       bundleId: id,
       displayName: w.title || w.exeName.replace(/\.exe$/i, ""),
@@ -356,7 +367,7 @@ export function listRunningApps(): Array<{
  * Uses SW_MINIMIZE instead of SW_HIDE so windows remain in the taskbar.
  */
 export function hideWindows(exeNames: string[]): void {
-  const targets = new Set(exeNames.map((n) => n.toUpperCase()));
+  const targets = new Set(exeNames.map((n) => bundleIdToExeName(n)));
 
   const callback = koffi.register(
     (hwnd: unknown, _lParam: unknown) => {
@@ -381,7 +392,7 @@ export function hideWindows(exeNames: string[]): void {
  * Show (unhide) windows belonging to specified processes.
  */
 export function unhideWindows(exeNames: string[]): void {
-  const targets = new Set(exeNames.map((n) => n.toUpperCase()));
+  const targets = new Set(exeNames.map((n) => bundleIdToExeName(n)));
 
   const callback = koffi.register(
     (hwnd: unknown, _lParam: unknown) => {
@@ -406,7 +417,7 @@ export function unhideWindows(exeNames: string[]): void {
  * Finds the first visible window for the process and activates it.
  */
 export function activateWindow(exeName: string): boolean {
-  const target = exeName.toUpperCase();
+  const target = bundleIdToExeName(exeName);
   let found = false;
 
   const callback = koffi.register(
@@ -449,7 +460,7 @@ export function shellOpen(target: string): void {
 export function findWindowDisplays(
   exeNames: string[],
 ): Array<{ bundleId: string; displayIds: number[] }> {
-  const targets = new Set(exeNames.map((n) => n.toUpperCase()));
+  const targets = new Set(exeNames.map((n) => bundleIdToExeName(n)));
   const result = new Map<string, Set<number>>();
 
   const nsWindows = NsWindow.all();

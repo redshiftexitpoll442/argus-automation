@@ -35,6 +35,7 @@ import {
   findWindowDisplays as nativeFindWindowDisplays,
   isSystemProcess,
   isExplorer,
+  bundleIdToExeName,
 } from "./window.js";
 import {
   moveMouse as nativeMoveMouse,
@@ -392,19 +393,22 @@ export function createWindowsExecutor(opts: {
         return [];
       }
 
+      // Normalize all bundleIds to uppercase exe filenames for comparison.
+      // bundleIds can be full paths ("c:\...\weixin.exe") or plain names
+      // ("WEIXIN.EXE") — bundleIdToExeName handles both.
       const allowSet = new Set(
-        allowlistBundleIds.map((id) => id.toUpperCase()),
+        allowlistBundleIds.map((id) => bundleIdToExeName(id)),
       );
       // Always allow explorer.exe (desktop/taskbar)
       allowSet.add(EXPLORER_EXE);
       // Allow the host process
-      allowSet.add(WIN_HOST_BUNDLE_ID.toUpperCase());
+      allowSet.add(bundleIdToExeName(WIN_HOST_BUNDLE_ID));
 
       const running = nativeListRunningApps();
       const toHide = running
         .filter(
           (app) =>
-            !allowSet.has(app.bundleId.toUpperCase()) &&
+            !allowSet.has(bundleIdToExeName(app.bundleId)) &&
             !isSystemProcess(app.bundleId) &&
             !isExplorer(app.bundleId),
         )
@@ -427,15 +431,15 @@ export function createWindowsExecutor(opts: {
       _displayId?: number,
     ): Promise<Array<{ bundleId: string; displayName: string }>> {
       const allowSet = new Set(
-        allowlistBundleIds.map((id) => id.toUpperCase()),
+        allowlistBundleIds.map((id) => bundleIdToExeName(id)),
       );
       allowSet.add(EXPLORER_EXE);
-      allowSet.add(WIN_HOST_BUNDLE_ID.toUpperCase());
+      allowSet.add(bundleIdToExeName(WIN_HOST_BUNDLE_ID));
 
       const running = nativeListRunningApps();
       return running.filter(
         (app) =>
-          !allowSet.has(app.bundleId.toUpperCase()) &&
+          !allowSet.has(bundleIdToExeName(app.bundleId)) &&
           !isSystemProcess(app.bundleId) &&
           !isExplorer(app.bundleId),
       );
@@ -682,8 +686,8 @@ export function createWindowsExecutor(opts: {
       const info = getForegroundWindowInfo();
       if (!info) return null;
       return {
-        bundleId: info.exeName.toUpperCase(),
-        displayName: info.title || info.exeName.replace(/\.exe$/i, ""),
+        bundleId: info.exePath.toLowerCase(),
+        displayName: extractAppName(info.title, info.exeName),
       };
     },
 
@@ -694,8 +698,8 @@ export function createWindowsExecutor(opts: {
       const info = getWindowFromPoint(x, y);
       if (!info) return null;
       return {
-        bundleId: info.exeName.toUpperCase(),
-        displayName: info.title || info.exeName.replace(/\.exe$/i, ""),
+        bundleId: info.exePath.toLowerCase(),
+        displayName: extractAppName(info.title, info.exeName),
       };
     },
 
