@@ -93,6 +93,57 @@ const SW_RESTORE = 9;
 const SW_SHOWNOACTIVATE = 4;
 const GA_ROOTOWNER = 3;
 
+// ── System process blacklist ───────────────────────────────────────────────
+// Mirrors the official Claude Desktop blacklist. These are OS-internal
+// processes that should never appear in app lists or be hide/unhide targets.
+
+const SYSTEM_PROCESS_BLACKLIST = new Set([
+  "dwm",
+  "winlogon",
+  "csrss",
+  "smss",
+  "wininit",
+  "services",
+  "lsass",
+  "svchost",
+  "spoolsv",
+  "taskhost",
+  "taskhostw",
+  "conhost",
+  "audiodg",
+  "fontdrvhost",
+  "sihost",
+  "runtimebroker",
+  "searchui",
+  "searchapp",
+  "searchhost",
+  "startmenuexperiencehost",
+  "shellexperiencehost",
+  "applicationframehost",
+  "textinputhost",
+]);
+
+/**
+ * Check if a bundleId (exe name) is a system process that should be excluded
+ * from app enumeration, hide/unhide, and frontmost checks.
+ */
+export function isSystemProcess(bundleId: string): boolean {
+  const name = bundleId
+    .toLowerCase()
+    .replace(/\.exe$/i, "")
+    .split(/[\\/]/)
+    .pop();
+  return name ? SYSTEM_PROCESS_BLACKLIST.has(name) : false;
+}
+
+/**
+ * Check if a bundleId is Windows Explorer (desktop/taskbar/file manager).
+ * Explorer is never hidden — equivalent of macOS Finder.
+ */
+export function isExplorer(bundleId: string): boolean {
+  return bundleId.toLowerCase().replace(/\.exe$/i, "").split(/[\\/]/).pop() === "explorer";
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -252,12 +303,8 @@ export function listVisibleWindows(): WindowInfo[] {
     if (!exePath) continue;
 
     const exeName = exeNameFromPath(exePath);
-    // Filter out Windows shell/system windows
-    if (
-      exeName.toLowerCase() === "shellexperiencehost.exe" ||
-      exeName.toLowerCase() === "textinputhost.exe" ||
-      exeName.toLowerCase() === "searchhost.exe"
-    ) {
+    // Filter out system processes (official Claude Desktop blacklist)
+    if (isSystemProcess(exeName) || isExplorer(exeName)) {
       continue;
     }
 
@@ -293,9 +340,10 @@ export function listRunningApps(): Array<{
   for (const w of windows) {
     const id = w.exeName.toUpperCase();
     if (seen.has(id)) continue;
+    if (isSystemProcess(id) || isExplorer(id)) continue;
     seen.add(id);
     result.push({
-      bundleId: w.exeName.toUpperCase(),
+      bundleId: id,
       displayName: w.title || w.exeName.replace(/\.exe$/i, ""),
     });
   }

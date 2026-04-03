@@ -2428,17 +2428,29 @@ async function handleType(
   );
   if (gate) return gate;
 
-  // §6 item 3 — clipboard-paste fast path for multi-line. Sub-gated AND
-  // requires clipboardWrite grant. The save/restore + read-back-verify
-  // lives in the EXECUTOR (task #5), not here. Here we just route.
+  // §6 item 3 — clipboard-paste fast path. Platform-branched:
+  //   Win32: text.length > 16 is enough (robotjs typeString is unreliable
+  //          for longer strings; no clipboardWrite grant needed).
+  //   macOS: multi-line only, requires clipboardWrite grant.
+  // Both require the clipboardPasteMultiline sub-gate.
   const viaClipboard =
-    text.includes("\n") &&
-    overrides.grantFlags.clipboardWrite &&
-    subGates.clipboardPasteMultiline;
+    adapter.executor.capabilities.platform === "win32"
+      ? text.length > 16 && subGates.clipboardPasteMultiline
+      : text.includes("\n") &&
+        overrides.grantFlags.clipboardWrite &&
+        subGates.clipboardPasteMultiline;
 
   if (viaClipboard) {
     await adapter.executor.type(text, { viaClipboard: true });
     return okText("Typed (via clipboard).");
+  }
+
+  // §6 typePaced fast path — if the executor implements typePaced, use it
+  // for the entire string with INTER_GRAPHEME_SLEEP_MS delay. This avoids
+  // the JS-level grapheme loop and lets the native layer handle pacing.
+  if (adapter.executor.typePaced) {
+    await adapter.executor.typePaced(text, INTER_GRAPHEME_SLEEP_MS);
+    return okText(`Typed ${text.length} char(s).`);
   }
 
   // §6 item 7 — grapheme-cluster iteration. Prevents ZWJ emoji → �.

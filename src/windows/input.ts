@@ -221,6 +221,23 @@ export function typeString(text: string): void {
 }
 
 /**
+ * Type a string character by character with a delay between each character.
+ * Used to bypass input detection that rejects instant text insertion.
+ * Mirrors claude-native's typeTextPaced(text, delayMs).
+ */
+export async function typeStringPaced(
+  text: string,
+  delayMs: number,
+): Promise<void> {
+  for (const char of text) {
+    robotjs.typeString(char);
+    if (delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+/**
  * Get the current screen size.
  */
 export function getScreenSize(): { width: number; height: number } {

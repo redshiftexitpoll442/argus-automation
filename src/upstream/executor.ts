@@ -171,6 +171,13 @@ export interface ComputerExecutor {
    */
   type(text: string, opts: { viaClipboard: boolean }): Promise<void>;
 
+  /**
+   * Type text character-by-character with a delay between each character.
+   * Used to bypass input detection. When present, the upstream dispatch
+   * prefers this over the grapheme-by-grapheme loop.
+   */
+  typePaced?(text: string, delayMs: number): Promise<void>;
+
   // ── Clipboard ───────────────────────────────────────────────────────────
 
   readClipboard(): Promise<string>;

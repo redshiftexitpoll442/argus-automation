@@ -33,6 +33,8 @@ import {
   activateWindow,
   shellOpen,
   findWindowDisplays as nativeFindWindowDisplays,
+  isSystemProcess,
+  isExplorer,
 } from "./window.js";
 import {
   moveMouse as nativeMoveMouse,
@@ -43,6 +45,7 @@ import {
   keyTap,
   keyToggle,
   typeString,
+  typeStringPaced,
 } from "./input.js";
 import {
   readClipboard as nativeReadClipboard,
@@ -159,73 +162,182 @@ async function typeViaClipboard(text: string): Promise<void> {
   }
 }
 
-// ── Registry-based installed-app scan ───────────────────────────────────────
+// ── AUMID-based installed-app scan ─────────────────────────────────────────
+// Mirrors the official Claude Desktop approach: AUMID (Application User Model
+// ID) as the canonical bundleId for Windows apps. Traditional Win32 apps use
+// their lowercase full exe path; UWP/MSIX apps use their AUMID.
 
-/** Cached result of the registry scan. */
-let _regApps: InstalledApp[] | null = null;
-let _regAppsTs = 0;
-const REG_CACHE_TTL = 5 * 60_000; // 5 minutes
+interface AumidCache {
+  /** Map displayName (lowercase) → bundleId for fuzzy lookup. */
+  byName: Map<string, string>;
+  /** Map bundleId → AUMID (for UWP launch via shell:AppsFolder). */
+  aumidByBundleId: Map<string, string>;
+  /** Full installed app list. */
+  installed: InstalledApp[];
+  lastUpdated: number;
+}
+
+const WINDIR = `${process.env.WINDIR ?? "C:\\Windows"}\\`.toLowerCase();
+const EXPLORER_FULL_PATH = `${WINDIR}explorer.exe`;
+const EXPLORER_AUMID = "Microsoft.Windows.Explorer";
+
+/** Cache TTL: 5 minutes. */
+const AUMID_CACHE_TTL = 5 * 60_000;
+let _aumidCache: AumidCache | null = null;
+let _aumidLastFail = 0;
+const AUMID_FAIL_COOLDOWN = 60_000;
 
 /**
- * Scan the Windows Uninstall registry keys for installed applications.
- * Queries HKLM (64-bit + WOW6432Node) and HKCU.  Only entries with a
- * recognisable .exe in DisplayIcon are returned.  Results are cached.
+ * Normalize an AUMID / exe path to a canonical bundleId.
+ * Official logic: if the aumid is the Explorer AUMID → use explorer full path.
+ * If targetPath contains backslash → use lowercase exe path.
+ * Otherwise use the aumid as-is.
  */
-async function getRegistryInstalledApps(): Promise<InstalledApp[]> {
-  const now = Date.now();
-  if (_regApps && now - _regAppsTs < REG_CACHE_TTL) return _regApps;
+function normalizeBundleId(aumid: string, targetPath: string): string {
+  if (aumid === EXPLORER_AUMID) return EXPLORER_FULL_PATH;
+  if (targetPath.includes("\\")) return targetPath.toLowerCase();
+  if (aumid.includes("\\")) return aumid.toLowerCase();
+  return aumid;
+}
 
+/**
+ * Scan installed apps via two sources:
+ * 1. Registry Uninstall keys (traditional Win32 apps)
+ * 2. PowerShell Get-AppxPackage (UWP/MSIX apps with AUMIDs)
+ *
+ * Returns normalized AUMID cache data.
+ */
+async function scanInstalledApps(): Promise<AumidCache> {
+  // Combined PowerShell script: registry scan + AppX enumeration
   const script =
     "$ErrorActionPreference='SilentlyContinue'\n" +
+    // Part 1: Registry scan (Win32 apps)
     "$r=@(\n" +
     "  'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',\n" +
     "  'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',\n" +
     "  'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'\n" +
     ")\n" +
-    "$a=$r|%{Get-ItemProperty $_}|?{\n" +
+    "$reg=$r|%{Get-ItemProperty $_}|?{\n" +
     "  $_.DisplayName -and !$_.SystemComponent -and\n" +
     "  $_.DisplayName -notmatch '^(KB\\d|Update |Security Update|Hotfix)'\n" +
     "}|%{\n" +
     "  $x=''\n" +
     "  if($_.DisplayIcon){$x=($_.DisplayIcon -split ',')[0].Trim('\"').Trim()}\n" +
-    "  if($x -match '\\.exe$' -and $x -notmatch '(msiexec|rundll32)'){[pscustomobject]@{n=$_.DisplayName.Trim();x=$x}}\n" +
-    "}|?{$_}|Sort-Object n -Unique\n" +
-    "if($a){$a|ConvertTo-Json -Compress}else{'[]'}";
+    "  if($x -match '\\.exe$' -and $x -notmatch '(msiexec|rundll32)'){[pscustomobject]@{n=$_.DisplayName.Trim();a='';x=$x}}\n" +
+    "}|?{$_}\n" +
+    // Part 2: AppX packages (UWP/MSIX with AUMIDs)
+    "$appx=@()\n" +
+    "try{\n" +
+    "  $pkgs=Get-AppxPackage -PackageTypeFilter Main|?{$_.SignatureKind -ne 'System' -and !$_.IsFramework}\n" +
+    "  foreach($p in $pkgs){\n" +
+    "    try{\n" +
+    "      $m=(Get-AppxPackageManifest $p).Package.Applications.Application\n" +
+    "      if($m){foreach($app in $m){\n" +
+    "        $aid=$p.PackageFamilyName+'!'+$app.Id\n" +
+    "        $dn=$p.Name -replace '^Microsoft\\.','' -replace '([a-z])([A-Z])','$1 $2'\n" +
+    "        $appx+=[pscustomobject]@{n=$dn;a=$aid;x=''}\n" +
+    "      }}\n" +
+    "    }catch{}\n" +
+    "  }\n" +
+    "}catch{}\n" +
+    "$all=@($reg)+@($appx)|Sort-Object n -Unique\n" +
+    "if($all.Count -gt 0){$all|ConvertTo-Json -Compress}else{'[]'}";
 
-  try {
-    const stdout = await new Promise<string>((resolve, reject) => {
-      execFile(
-        "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-Command", script],
-        { timeout: 15_000 },
-        (err, out) => (err ? reject(err) : resolve(out)),
-      );
-    });
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      { timeout: 15_000 },
+      (err, out) => (err ? reject(err) : resolve(out)),
+    );
+  });
 
-    const raw = JSON.parse(stdout.trim() || "[]");
-    const items: Array<{ n: string; x: string }> = Array.isArray(raw)
-      ? raw
-      : [raw];
+  const raw = JSON.parse(stdout.trim() || "[]");
+  const items: Array<{ n: string; a: string; x: string }> = Array.isArray(raw)
+    ? raw
+    : [raw];
 
-    const seen = new Set<string>();
-    const apps: InstalledApp[] = [];
-    for (const { n, x } of items) {
-      if (!n || !x) continue;
-      const exeName = x.match(/([^\\\/]+)$/)?.[1];
-      if (!exeName) continue;
-      const id = exeName.toUpperCase();
-      if (seen.has(id)) continue;
-      seen.add(id);
-      apps.push({ bundleId: id, displayName: n, path: x });
+  const byName = new Map<string, string>();
+  const aumidByBundleId = new Map<string, string>();
+  const installed: InstalledApp[] = [];
+
+  for (const { n: displayName, a: aumid, x: targetPath } of items) {
+    if (!displayName) continue;
+    if (!aumid && !targetPath) continue;
+
+    let bundleId: string;
+    if (aumid) {
+      // UWP/MSIX app
+      bundleId = normalizeBundleId(aumid, targetPath);
+      aumidByBundleId.set(bundleId, aumid);
+    } else {
+      // Traditional Win32 app
+      bundleId = targetPath.toLowerCase();
     }
 
-    _regApps = apps;
-    _regAppsTs = now;
-    return apps;
-  } catch {
-    // Registry scan is best-effort; fall through to running-apps only.
-    return [];
+    byName.set(displayName.toLowerCase(), bundleId);
+    installed.push({ bundleId, displayName, path: aumid || targetPath });
   }
+
+  return { byName, aumidByBundleId, installed, lastUpdated: Date.now() };
+}
+
+/**
+ * Ensure the AUMID cache is populated. Returns silently on failure.
+ */
+async function ensureAumidCache(): Promise<void> {
+  const now = Date.now();
+  if (_aumidCache && now - _aumidCache.lastUpdated < AUMID_CACHE_TTL) return;
+  if (now - _aumidLastFail < AUMID_FAIL_COOLDOWN) return;
+
+  try {
+    _aumidCache = await scanInstalledApps();
+  } catch {
+    _aumidLastFail = now;
+  }
+}
+
+/**
+ * Fuzzy-match a display name to a bundleId in the AUMID cache.
+ * Supports substring matching in both directions (official logic).
+ */
+function fuzzyLookupBundleId(query: string): string | null {
+  if (!_aumidCache) return null;
+  const q = query.toLowerCase().replace(/\.exe$/i, "").trim();
+
+  // Exact match
+  const exact = _aumidCache.byName.get(q);
+  if (exact) return exact;
+
+  // Substring match (best score)
+  let best: { bundleId: string; score: number } | null = null;
+  for (const [name, bundleId] of _aumidCache.byName) {
+    let score: number | undefined;
+    if (name.includes(q)) {
+      score = 10000 - name.length; // prefer shorter names (more specific)
+    } else if (q.includes(name)) {
+      score = name.length; // prefer longer matches
+    }
+    if (score !== undefined && (!best || score > best.score)) {
+      best = { bundleId, score };
+    }
+  }
+  return best?.bundleId ?? null;
+}
+
+/**
+ * Check if a bundleId looks like an AUMID (UWP package format).
+ */
+function isAumidFormat(bundleId: string): boolean {
+  // PackageFamilyName!AppId or PackageName_hash
+  return /^[\w.-]+[_!][\w]+/.test(bundleId);
+}
+
+/**
+ * Launch an app by AUMID via shell:AppsFolder.
+ */
+async function launchByAumid(aumid: string): Promise<void> {
+  shellOpen(`shell:AppsFolder\\${aumid}`);
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -264,7 +376,12 @@ export function createWindowsExecutor(opts: {
 
       const running = nativeListRunningApps();
       const toHide = running
-        .filter((app) => !allowSet.has(app.bundleId.toUpperCase()))
+        .filter(
+          (app) =>
+            !allowSet.has(app.bundleId.toUpperCase()) &&
+            !isSystemProcess(app.bundleId) &&
+            !isExplorer(app.bundleId),
+        )
         .map((app) => app.bundleId);
 
       if (toHide.length > 0) {
@@ -291,7 +408,10 @@ export function createWindowsExecutor(opts: {
 
       const running = nativeListRunningApps();
       return running.filter(
-        (app) => !allowSet.has(app.bundleId.toUpperCase()),
+        (app) =>
+          !allowSet.has(app.bundleId.toUpperCase()) &&
+          !isSystemProcess(app.bundleId) &&
+          !isExplorer(app.bundleId),
       );
     },
 
@@ -425,6 +545,15 @@ export function createWindowsExecutor(opts: {
       typeString(text);
     },
 
+    async typePaced(text: string, delayMs: number): Promise<void> {
+      // Non-ASCII → clipboard paste (IME bypass), same as type()
+      if (/[^\x00-\x7F]/.test(text)) {
+        await typeViaClipboard(text);
+        return;
+      }
+      await typeStringPaced(text, delayMs);
+    },
+
     // ── Clipboard ─────────────────────────────────────────────────────────
 
     async readClipboard(): Promise<string> {
@@ -545,23 +674,25 @@ export function createWindowsExecutor(opts: {
     },
 
     async listInstalledApps(): Promise<InstalledApp[]> {
-      // Merge registry-scanned apps (comprehensive) with running apps
-      // (catches portable apps and provides fresh window titles).
-      const [registryApps, visibleWindows] = await Promise.all([
-        getRegistryInstalledApps(),
-        Promise.resolve(listVisibleWindows()),
-      ]);
+      // Merge AUMID-scanned apps (comprehensive: registry + AppX) with
+      // running apps (catches portable / unregistered apps).
+      await ensureAumidCache();
 
       const byId = new Map<string, InstalledApp>();
 
-      for (const app of registryApps) {
-        byId.set(app.bundleId, app);
+      if (_aumidCache) {
+        for (const app of _aumidCache.installed) {
+          if (!isSystemProcess(app.bundleId)) {
+            byId.set(app.bundleId, app);
+          }
+        }
       }
 
       // Running apps fill gaps (portable / unregistered apps)
+      const visibleWindows = listVisibleWindows();
       for (const w of visibleWindows) {
-        const id = w.exeName.toUpperCase();
-        if (!byId.has(id)) {
+        const id = w.exePath.toLowerCase();
+        if (!byId.has(id) && !isSystemProcess(w.exeName)) {
           byId.set(id, {
             bundleId: id,
             displayName: w.title || w.exeName.replace(/\.exe$/i, ""),
@@ -580,13 +711,42 @@ export function createWindowsExecutor(opts: {
     },
 
     async listRunningApps(): Promise<RunningApp[]> {
-      return nativeListRunningApps();
+      return nativeListRunningApps().filter(
+        (app) => !isSystemProcess(app.bundleId) && !isExplorer(app.bundleId),
+      );
     },
 
     async openApp(bundleId: string): Promise<void> {
-      // Try to activate existing window first
+      // Try to activate an existing window first
       if (activateWindow(bundleId)) return;
-      // Otherwise try to launch by exe name
+
+      // If it's an AUMID, check cache and launch via shell:AppsFolder
+      await ensureAumidCache();
+      const aumid = _aumidCache?.aumidByBundleId.get(bundleId);
+      if (aumid) {
+        await launchByAumid(aumid);
+        return;
+      }
+
+      // If the bundleId itself looks like an AUMID, try launching directly
+      if (isAumidFormat(bundleId)) {
+        await launchByAumid(bundleId);
+        return;
+      }
+
+      // If it's a full path or exe name, launch directly
+      if (bundleId.includes("\\") || /^[a-z]:/i.test(bundleId)) {
+        shellOpen(bundleId);
+        return;
+      }
+
+      // Try fuzzy lookup by display name
+      const resolved = fuzzyLookupBundleId(bundleId);
+      if (resolved && resolved !== bundleId) {
+        return this.openApp(resolved);
+      }
+
+      // Fallback: try to open as-is
       shellOpen(bundleId);
     },
   };
