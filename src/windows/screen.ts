@@ -7,8 +7,52 @@
 
 import { Monitor } from "node-screenshots";
 import sharp from "sharp";
+import { writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { DisplayGeometry, ScreenshotResult } from "../upstream/executor.js";
 import { targetImageSize, API_RESIZE_PARAMS } from "../upstream/imageResize.js";
+
+// ── Screenshot cache ─────────────────────────────────────────────────────────
+
+/**
+ * Directory for cached screenshots. Resolved relative to the project root
+ * (gui-automation/screenshots/). Created on first save.
+ */
+let _screenshotDir: string | null = null;
+
+function getScreenshotDir(): string {
+  if (!_screenshotDir) {
+    // Walk up from dist/windows/ or src/windows/ to the repo root's parent
+    // __dirname at runtime = .../argus-automation/dist/windows
+    // We want gui-automation/screenshots (two levels up from argus-automation)
+    const argusRoot = join(import.meta.dirname ?? __dirname, "..", "..");
+    _screenshotDir = join(argusRoot, "..", "screenshots");
+  }
+  return _screenshotDir;
+}
+
+/**
+ * Save a JPEG base64 screenshot to the cache directory.
+ * Fire-and-forget — failures must never block the MCP server.
+ */
+async function cacheScreenshot(
+  base64: string,
+  tag: "full" | "region" | "zoom",
+): Promise<void> {
+  try {
+    const dir = getScreenshotDir();
+    if (!existsSync(dir)) {
+      await mkdir(dir, { recursive: true });
+    }
+    const now = new Date();
+    const ts = now.toISOString().replace(/[:.]/g, "-"); // 2026-04-04T12-30-45-123Z
+    const filename = `${tag}_${ts}.jpg`;
+    await writeFile(join(dir, filename), Buffer.from(base64, "base64"));
+  } catch {
+    // Swallow — caching failure must never block the MCP server.
+  }
+}
 
 const SCREENSHOT_JPEG_QUALITY = 75; // 0.75 in Chicago MCP → 75 in sharp (1-100 scale)
 
@@ -132,6 +176,9 @@ export async function captureMonitor(
     targetH,
   );
 
+  // Cache to local screenshots/ folder (fire-and-forget)
+  cacheScreenshot(jpeg.base64, "full");
+
   return {
     base64: jpeg.base64,
     width: jpeg.width,
@@ -187,7 +234,7 @@ export async function captureRegion(
   const cropped = await image.crop(clampedX, clampedY, clampedW, clampedH);
   const rawBuffer = await cropped.toRaw();
 
-  return imageToJpegBase64(
+  const result = await imageToJpegBase64(
     rawBuffer,
     cropped.width,
     cropped.height,
@@ -195,6 +242,11 @@ export async function captureRegion(
     outH,
     quality,
   );
+
+  // Cache to local screenshots/ folder (fire-and-forget)
+  cacheScreenshot(result.base64, "region");
+
+  return result;
 }
 
 /**
