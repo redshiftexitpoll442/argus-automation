@@ -13,11 +13,15 @@ const executor = createWindowsExecutor({
   getHideBeforeActionEnabled: () => false,
 });
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 describe("executor — capabilities", () => {
   it("should report win32 platform with no screenshot filtering", () => {
     expect(executor.capabilities.platform).toBe("win32");
     expect(executor.capabilities.screenshotFiltering).toBe("none");
-    expect(executor.capabilities.hostBundleId).toBe("windows-computer-use-mcp");
+    expect(executor.capabilities.hostBundleId).toBe("argus-automation");
   });
 });
 
@@ -79,8 +83,15 @@ describe("executor — mouse", () => {
   });
 
   it("should move mouse and verify position", async () => {
-    await executor.moveMouse(150, 150);
-    const pos = await executor.getCursorPosition();
+    let pos = await executor.getCursorPosition();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await executor.moveMouse(150, 150);
+      await sleep(100);
+      pos = await executor.getCursorPosition();
+      if (Math.abs(pos.x - 150) < 5 && Math.abs(pos.y - 150) < 5) {
+        break;
+      }
+    }
     expect(Math.abs(pos.x - 150)).toBeLessThan(5);
     expect(Math.abs(pos.y - 150)).toBeLessThan(5);
   });

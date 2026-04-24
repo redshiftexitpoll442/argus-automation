@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server-mcp.js",
+    "start:codex": "node dist/server-codex-mcp.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",

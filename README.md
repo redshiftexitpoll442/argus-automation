@@ -12,7 +12,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet" alt="Built with Claude Code" />
   <img src="https://img.shields.io/badge/Powered%20by-Claude%20Opus%204.6-blue" alt="Powered by Claude Opus 4.6" />
-  <img src="https://img.shields.io/badge/Tests-70%20passed-brightgreen" alt="70 tests passed" />
+  <img src="https://img.shields.io/badge/Tests-75%20passed-brightgreen" alt="75 tests passed" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License" />
 </p>
 
@@ -155,7 +155,7 @@ Add to your project's `.mcp.json`:
   "mcpServers": {
     "argus": {
       "command": "node",
-      "args": ["C:/path/to/argus-automation/dist/index.js"]
+      "args": ["C:/path/to/argus-automation/dist/server-mcp.js"]
     }
   }
 }
@@ -163,10 +163,28 @@ Add to your project's `.mcp.json`:
 
 Restart Claude Code. You'll see 24 new tools prefixed with `mcp__argus__`.
 
+### Configure in Codex on Windows
+
+Argus also ships a Codex-specific MCP entry point that keeps the Claude Code
+tool surface unchanged:
+
+```toml
+[mcp_servers.argus-codex]
+command = "node"
+args = ["D:\\claude-d\\gui-automation\\argus-automation\\dist\\server-codex-mcp.js"]
+cwd = "D:\\claude-d\\gui-automation\\argus-automation"
+tool_timeout_sec = 120
+```
+
+This local server does not call the OpenAI API and does not require
+`OPENAI_API_KEY`; Codex invokes it as a local MCP tool server. See
+[`docs/CODEX_WINDOWS_CUA.md`](docs/CODEX_WINDOWS_CUA.md) for the action schema
+and plugin packaging notes.
+
 ### Test
 
 ```bash
-npm test          # 70 tests (unit + integration)
+npm test          # 75 tests (unit + integration)
 npm run test:unit # Unit tests only
 ```
 

@@ -1,0 +1,41 @@
+{
+  "name": "argus-codex-computer-use",
+  "version": "0.1.0",
+  "description": "Use Argus as a local Codex MCP computer-use tool for Windows desktop automation.",
+  "author": {
+    "name": "Argus Automation",
+    "email": "support@example.com",
+    "url": "https://github.com/"
+  },
+  "homepage": "https://github.com/",
+  "repository": "https://github.com/",
+  "license": "UNLICENSED",
+  "keywords": [
+    "computer-use",
+    "windows",
+    "mcp",
+    "desktop-automation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Argus Codex Computer Use",
+    "shortDescription": "Operate Windows desktop apps from Codex through local MCP.",
+    "longDescription": "Argus exposes a Codex-specific MCP server for Windows desktop observation and input. It runs locally, does not call the OpenAI API, and does not require an OpenAI API key.",
+    "developerName": "Argus Automation",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/",
+    "privacyPolicyURL": "https://github.com/",
+    "termsOfServiceURL": "https://github.com/",
+    "defaultPrompt": [
+      "Use Argus to open Notepad and type a test message.",
+      "Use Argus to operate the current Windows app.",
+      "Use Argus to observe the desktop and click the target."
+    ],
+    "brandColor": "#1F7A5A"
+  }
+}

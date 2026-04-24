@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "argus-codex": {
+      "command": "node",
+      "args": ["dist/server-codex-mcp.js"],
+      "cwd": "../..",
+      "tool_timeout_sec": 120
+    }
+  }
+}

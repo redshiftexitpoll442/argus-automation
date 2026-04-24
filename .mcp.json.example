@@ -3,6 +3,10 @@
     "argus": {
       "command": "node",
       "args": ["/path/to/argus-automation/dist/server-mcp.js"]
+    },
+    "argus-codex": {
+      "command": "node",
+      "args": ["/path/to/argus-automation/dist/server-codex-mcp.js"]
     }
   }
 }

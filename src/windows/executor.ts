@@ -78,6 +78,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const NOOP_LOGGER: Logger = {
+  info: () => {},
+  error: () => {},
+  warn: () => {},
+  debug: () => {},
+  silly: () => {},
+};
+
 /**
  * Move the mouse and wait for the position to settle.
  */
@@ -371,11 +379,15 @@ async function launchByAumid(aumid: string): Promise<void> {
 // ── Factory ─────────────────────────────────────────────────────────────────
 
 export function createWindowsExecutor(opts: {
-  logger: Logger;
+  logger?: Logger;
   getMouseAnimationEnabled: () => boolean;
   getHideBeforeActionEnabled: () => boolean;
 }): ComputerExecutor {
-  const { logger, getMouseAnimationEnabled, getHideBeforeActionEnabled } = opts;
+  const {
+    logger = NOOP_LOGGER,
+    getMouseAnimationEnabled,
+    getHideBeforeActionEnabled,
+  } = opts;
 
   return {
     capabilities: {
